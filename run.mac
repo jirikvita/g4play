@@ -1,0 +1,22 @@
+/run/initialize
+
+# Visualization driver comes from $VIS_DRIVER (default VRML2FILE -> g4_00.wrl; use OGL for a window)
+/control/getEnv VIS_DRIVER
+/vis/open {VIS_DRIVER}
+/vis/drawVolume
+/vis/viewer/set/viewpointThetaPhi 70 20
+/vis/scene/add/trajectories smooth
+/vis/scene/endOfEventAction accumulate
+
+# Hide optical photons in the display
+/vis/filtering/trajectories/create/particleFilter
+/vis/filtering/trajectories/particleFilter-0/add opticalphoton
+/vis/filtering/trajectories/particleFilter-0/invert true
+
+# e-, e+, mu-, mu+, pi-, pi+, proton, anti_proton
+/gun/particle mu+
+/gun/energy 800 MeV
+/run/beamOn 1000
+
+# Interactive: VIS_DRIVER=OGL ./waterCherenkovSim run.mac -i
+

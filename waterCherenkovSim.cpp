@@ -23,6 +23,14 @@
 #include "G4UImanager.hh"
 #include "G4UIExecutive.hh"
 #include "G4VisExecutive.hh"
+#include "G4UserRunAction.hh"
+#include "G4UserSteppingAction.hh"
+#include "G4AnalysisManager.hh"
+#include "G4Step.hh"
+#include "G4Track.hh"
+#include "G4Event.hh"
+#include "G4EventManager.hh"
+#include "G4VProcess.hh"
 
 #include <cstdlib>
 #include <vector>
@@ -91,9 +99,68 @@ private:
   G4ParticleGun* fGun;
 };
 
+// Opens muonDecay.root with an ntuple "muonDecay"; worker ntuples are merged into one file.
+class RunAction : public G4UserRunAction {
+public:
+  RunAction() {
+    auto* am = G4AnalysisManager::Instance();
+    am->SetNtupleMerging(true);
+    am->SetVerboseLevel(0);
+    am->CreateNtuple("muonDecay", "Last muon point before decay");
+    am->CreateNtupleIColumn("eventID");
+    am->CreateNtupleIColumn("trackID");
+    am->CreateNtupleIColumn("pdg");
+    am->CreateNtupleDColumn("x_mm");
+    am->CreateNtupleDColumn("y_mm");
+    am->CreateNtupleDColumn("z_mm");
+    am->CreateNtupleDColumn("t_ns");
+    am->CreateNtupleDColumn("ekin_MeV");
+    am->FinishNtuple();
+  }
+  void BeginOfRunAction(const G4Run*) override {
+    const char* out = std::getenv("MUON_OUT");
+    G4AnalysisManager::Instance()->OpenFile(out ? out : "muonDecay.root");
+  }
+  void EndOfRunAction(const G4Run*) override {
+    auto* am = G4AnalysisManager::Instance();
+    am->Write();
+    am->CloseFile();
+  }
+};
+
+// Fills one row per muon at the step in which it decays (post-step point = last track point).
+class SteppingAction : public G4UserSteppingAction {
+public:
+  void UserSteppingAction(const G4Step* step) override {
+    const auto* track = step->GetTrack();
+    if (std::abs(track->GetDefinition()->GetPDGEncoding()) != 13) return;
+    const auto* post = step->GetPostStepPoint();
+    const auto* proc = post->GetProcessDefinedStep();
+    // Stopped mu- end via capture-at-rest in Geant4 (it never gets a "Decay" step).
+    if (!proc || (proc->GetProcessName() != "Decay" && proc->GetProcessName() != "muMinusCaptureAtRest")) return;
+
+    const auto pos = post->GetPosition();
+    auto* am = G4AnalysisManager::Instance();
+    am->FillNtupleIColumn(0, G4EventManager::GetEventManager()->GetConstCurrentEvent()->GetEventID());
+    am->FillNtupleIColumn(1, track->GetTrackID());
+    am->FillNtupleIColumn(2, track->GetDefinition()->GetPDGEncoding());
+    am->FillNtupleDColumn(3, pos.x() / mm);
+    am->FillNtupleDColumn(4, pos.y() / mm);
+    am->FillNtupleDColumn(5, pos.z() / mm);
+    am->FillNtupleDColumn(6, post->GetGlobalTime() / ns);
+    am->FillNtupleDColumn(7, post->GetKineticEnergy() / MeV);
+    am->AddNtupleRow();
+  }
+};
+
 class ActionInitialization : public G4VUserActionInitialization {
 public:
-  void Build() const override { SetUserAction(new PrimaryGenerator()); }
+  void BuildForMaster() const override { SetUserAction(new RunAction()); }
+  void Build() const override {
+    SetUserAction(new PrimaryGenerator());
+    SetUserAction(new RunAction());
+    SetUserAction(new SteppingAction());
+  }
 };
 
 // Usage: ./waterCherenkovSim [macro.mac] [-i]   (-i keeps the viewer open after the macro)

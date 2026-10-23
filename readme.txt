@@ -20,3 +20,23 @@ and in the command line of the GUI:
 # select particles only:
 /vis/filtering/trajectories/particleFilter-0/add mu-
 /vis/filtering/trajectories/particleFilter-0/add e-
+
+
+
+./waterCherenkovSim run.mac now creates muonDecay.root (about 47 KB). The muonDecay tree has 100 entries, one per event, for the 100 mu- at 300 MeV in your run.mac.
+
+The first run didn't create the file because of the mu- in your current run.mac. In Geant4 a stopped mu- ends in muMinusCaptureAtRest and never gets a Decay step. With 100 mu- no rows
+
+
+
+No, it doesn't decay in the simulation. What's saved for mu- is where it stops and is captured.
+
+In Geant4 (FTFP_BERT) a mu- that comes to rest in water is ended by the muMinusCaptureAtRest process, not by Decay. In the 20-event mu- trace I checked, every stopped mu- ended that way and none had a Decay step.
+
+The saved row for a mu- is therefore its stopping point, with ekin_MeV = 0. Real bound mu- in water mostly decay in orbit (about 80%) and are captured by the nucleus only about 20% of the time. This simulation applies capture to all of them, so it doesn't reproduce that decay fraction.
+
+My earlier wording "can be captured" understated this, since in these runs all of them were.
+
+For physics that depends on the decay fraction, the pdg column separates the cases. A pdg of −13 is a mu+, which always gets a true Decay step, and 13 is a mu-, whose saved point is the stopping point.
+
+If you want only true decays, revert the muMinusCaptureAtRest condition. mu- would then never be saved. If you want the decay-in-orbit fraction, that needs a different muon-capture physics setup, which I can look into.
