@@ -9,11 +9,11 @@
 /vis/scene/endOfEventAction accumulate
 
 # Hide optical photons, electrons and positrons in the display
-/vis/filtering/trajectories/create/particleFilter
-/vis/filtering/trajectories/particleFilter-0/add opticalphoton
-/vis/filtering/trajectories/particleFilter-0/add e-
-/vis/filtering/trajectories/particleFilter-0/add e+
-/vis/filtering/trajectories/particleFilter-0/invert true
+#/vis/filtering/trajectories/create/particleFilter
+#/vis/filtering/trajectories/particleFilter-0/add opticalphoton
+#/vis/filtering/trajectories/particleFilter-0/add e-
+#/vis/filtering/trajectories/particleFilter-0/add e+
+#/vis/filtering/trajectories/particleFilter-0/invert true
 
 # Hide all neutral particles (gammas, neutrinos, neutrons, ...), i.e. every green track
 /vis/filtering/trajectories/create/chargeFilter
