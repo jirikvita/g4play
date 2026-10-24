@@ -33,7 +33,11 @@
 #include "G4VProcess.hh"
 
 #include <cstdlib>
+#include <map>
 #include <vector>
+
+// Gun direction of the current event (per thread), used by the stepping action.
+thread_local G4ThreeVector gGunDir(1., 0., 0.);
 
 class DetectorConstruction : public G4VUserDetectorConstruction {
 public:
@@ -93,7 +97,10 @@ public:
     fGun->SetParticlePosition(G4ThreeVector(-(1.75 * m + 10. * cm), 0., 0.));
   }
   ~PrimaryGenerator() override { delete fGun; }
-  void GeneratePrimaries(G4Event* event) override { fGun->GeneratePrimaryVertex(event); }
+  void GeneratePrimaries(G4Event* event) override {
+    gGunDir = fGun->GetParticleMomentumDirection();
+    fGun->GeneratePrimaryVertex(event);
+  }
 
 private:
   G4ParticleGun* fGun;
@@ -115,6 +122,7 @@ public:
     am->CreateNtupleDColumn("z_mm");
     am->CreateNtupleDColumn("t_ns");
     am->CreateNtupleDColumn("ekin_MeV");
+    am->CreateNtupleDColumn("angle_deg");  // -1 if the muon never crossed the plane
     am->FinishNtuple();
   }
   void BeginOfRunAction(const G4Run*) override {
@@ -135,6 +143,19 @@ public:
     const auto* track = step->GetTrack();
     if (std::abs(track->GetDefinition()->GetPDGEncoding()) != 13) return;
     const auto* post = step->GetPostStepPoint();
+
+    const int evt = G4EventManager::GetEventManager()->GetConstCurrentEvent()->GetEventID();
+    if (evt != fEvent) {
+      fEvent = evt;
+      fAngle.clear();
+    }
+    // Angle to the gun direction, from the first step ending on or beyond the plane through
+    // the tank centre (origin) that is perpendicular to the gun direction.
+    const int id = track->GetTrackID();
+    if (!fAngle.count(id) && post->GetPosition().dot(gGunDir) >= 0.) {
+      fAngle[id] = post->GetMomentumDirection().angle(gGunDir) / deg;
+    }
+
     const auto* proc = post->GetProcessDefinedStep();
     // Stopped mu- end via capture-at-rest in Geant4 (it never gets a "Decay" step).
     if (!proc || (proc->GetProcessName() != "Decay" && proc->GetProcessName() != "muMinusCaptureAtRest")) return;
@@ -149,8 +170,14 @@ public:
     am->FillNtupleDColumn(5, pos.z() / mm);
     am->FillNtupleDColumn(6, post->GetGlobalTime() / ns);
     am->FillNtupleDColumn(7, post->GetKineticEnergy() / MeV);
+    const auto it = fAngle.find(id);
+    am->FillNtupleDColumn(8, it != fAngle.end() ? it->second : -1.);
     am->AddNtupleRow();
   }
+
+private:
+  int fEvent = -1;
+  std::map<int, double> fAngle;  // trackID -> angle [deg]
 };
 
 class ActionInitialization : public G4VUserActionInitialization {
@@ -171,9 +198,11 @@ int main(int argc, char** argv) {
     if (G4String(argv[i]) == "-i") interactive = true;
     else macro = argv[i];
   }
-  // This build may lack OpenGL/Qt; VRML2FILE is the fallback. Macros read it via /control/getEnv.
-  setenv("VIS_DRIVER", "VRML2FILE", 0);
-  G4UIExecutive* ui = interactive ? new G4UIExecutive(argc, argv) : nullptr;
+  // Batch default is VRML2FILE; an interactive session defaults to an OpenGL window.
+  // Macros read it via /control/getEnv. Set VIS_DRIVER to override.
+  setenv("VIS_DRIVER", interactive ? "OGL" : "VRML2FILE", 0);
+  // Pass argc=1 so the session type is not guessed from the macro name.
+  G4UIExecutive* ui = interactive ? new G4UIExecutive(1, argv) : nullptr;
 
   auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);
   runManager->SetUserInitialization(new DetectorConstruction());
