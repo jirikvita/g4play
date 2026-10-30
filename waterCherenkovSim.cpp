@@ -31,13 +31,51 @@
 #include "G4Event.hh"
 #include "G4EventManager.hh"
 #include "G4VProcess.hh"
+#include "G4OpBoundaryProcess.hh"
+#include "G4ProcessManager.hh"
+#include "G4Sphere.hh"
+#include "G4VSensitiveDetector.hh"
+#include "G4SDManager.hh"
+#include "G4UserEventAction.hh"
+#include "G4OpticalSurface.hh"
+#include "G4LogicalSkinSurface.hh"
+#include "G4RotationMatrix.hh"
+#include "G4Transform3D.hh"
+#include "G4PhysicalConstants.hh"
+#include "G4TouchableHistory.hh"
+#include "G4OpticalPhoton.hh"
 
+#include <algorithm>
 #include <cstdlib>
 #include <map>
 #include <vector>
 
 // Gun direction of the current event (per thread), used by the stepping action.
 thread_local G4ThreeVector gGunDir(1., 0., 0.);
+
+// Silicon centre of every photon sensor module (index = copy number of the vacuum volume).
+std::vector<G4ThreeVector> gSiPos;
+// Per-thread optical photon hit counts of the current event: module index -> hits.
+struct SiHit { int n = 0; double tFirst = 0., tSum = 0.; };
+thread_local std::map<int, SiHit> gSiHits;
+
+// Counts optical/UV photons absorbed at the silicon surface (flagged by the skin surface).
+class SiliconSD : public G4VSensitiveDetector {
+public:
+  explicit SiliconSD(const G4String& name) : G4VSensitiveDetector(name) {}
+  G4bool ProcessHits(G4Step* step, G4TouchableHistory*) override {
+    if (step->GetTrack()->GetDefinition() != G4OpticalPhoton::OpticalPhotonDefinition()) return false;
+    // Depth 0 = silicon, depth 1 = vacuum volume carrying the module index.
+    const auto* touch = step->GetPostStepPoint()->GetTouchable();
+    // Global time is measured from the primary generation (gun time = 0)
+    const double t = step->GetPostStepPoint()->GetGlobalTime();
+    auto& h = gSiHits[touch->GetCopyNumber(1)];
+    h.tFirst = h.n == 0 ? t : std::min(h.tFirst, t);
+    h.tSum += t;
+    ++h.n;
+    return true;
+  }
+};
 
 class DetectorConstruction : public G4VUserDetectorConstruction {
 public:
@@ -83,7 +121,95 @@ public:
     wva->SetForceSolid(true);
     waterLV->SetVisAttributes(wva);
 
+    BuildSensors(waterLV, outerR - wall, halfH - wall);
+
     return worldPV;
+  }
+
+  void ConstructSDandField() override {
+    auto* sd = new SiliconSD("SiliconSD");
+    G4SDManager::GetSDMpointer()->AddNewDetector(sd);
+    SetSensitiveDetector("SiliconLV", sd);
+  }
+
+private:
+  // Half-spherical glass modules (D = 8 cm, 1 mm shell, vacuum inside, 5 mm silicon base)
+  // on a 10 cm grid over the inner barrel wall and both end caps, domes pointing inward.
+  void BuildSensors(G4LogicalVolume* mother, G4double rIn, G4double halfZ) {
+    auto* nist = G4NistManager::Instance();
+    auto* glass = nist->FindOrBuildMaterial("G4_Pyrex_Glass");
+    auto* vacuum = nist->FindOrBuildMaterial("G4_Galactic");
+    auto* silicon = nist->FindOrBuildMaterial("G4_Si");
+
+    std::vector<G4double> e = {1.9 * eV, 2.3 * eV, 2.8 * eV, 3.3 * eV, 4.0 * eV};
+    auto* gmpt = new G4MaterialPropertiesTable();
+    gmpt->AddProperty("RINDEX", e, std::vector<G4double>(e.size(), 1.5));
+    gmpt->AddProperty("ABSLENGTH", e, std::vector<G4double>(e.size(), 1. * m));
+    glass->SetMaterialPropertiesTable(gmpt);
+    auto* vmpt = new G4MaterialPropertiesTable();
+    vmpt->AddProperty("RINDEX", e, std::vector<G4double>(e.size(), 1.0));
+    vacuum->SetMaterialPropertiesTable(vmpt);
+
+    const G4double rOut = 4. * cm, thick = 1. * mm, siT = 5. * mm, rSi = 3.8 * cm;
+    const G4double rInner = rOut - thick;
+    const G4double gap = 0.5 * mm;  // keeps the flat base off the curved steel wall
+    const G4double pitch = 10. * cm;
+
+    auto* glassS = new G4Sphere("Glass", rInner, rOut, 0., twopi, 0., halfpi);
+    auto* vacS = new G4Sphere("Vacuum", 0., rInner, 0., twopi, 0., halfpi);
+    auto* siS = new G4Tubs("Silicon", 0., rSi, siT / 2, 0., twopi);
+    auto* glassLV = new G4LogicalVolume(glassS, glass, "GlassLV");
+    auto* vacLV = new G4LogicalVolume(vacS, vacuum, "VacuumLV");
+    auto* siLV = new G4LogicalVolume(siS, silicon, "SiliconLV");
+    new G4PVPlacement(nullptr, G4ThreeVector(0., 0., siT / 2), siLV, "Silicon", vacLV, false, 0, false);
+
+    // Perfect absorber that registers a detection for every photon reaching the silicon
+    auto* surf = new G4OpticalSurface("SiSurface", unified, polished, dielectric_metal);
+    auto* smpt = new G4MaterialPropertiesTable();
+    smpt->AddProperty("REFLECTIVITY", e, std::vector<G4double>(e.size(), 0.));
+    smpt->AddProperty("EFFICIENCY", e, std::vector<G4double>(e.size(), 1.));
+    surf->SetMaterialPropertiesTable(smpt);
+    new G4LogicalSkinSurface("SiSkin", siLV, surf);
+
+    auto* gva = new G4VisAttributes(G4Colour(0.8, 0.9, 1., 0.4));
+    glassLV->SetVisAttributes(gva);
+    vacLV->SetVisAttributes(G4VisAttributes::GetInvisible());
+    siLV->SetVisAttributes(new G4VisAttributes(G4Colour(1., 0.2, 0.2)));
+
+    int copy = 0;
+    auto place = [&](const G4ThreeVector& wallPoint, const G4ThreeVector& inward) {
+      G4ThreeVector xa = inward.orthogonal().unit();
+      G4RotationMatrix rot(xa, inward.cross(xa), inward);
+      const G4ThreeVector origin = wallPoint + gap * inward;
+      G4Transform3D tr(rot, origin);
+      new G4PVPlacement(tr, glassLV, "Glass", mother, false, copy, false);
+      new G4PVPlacement(tr, vacLV, "Vacuum", mother, false, copy, false);
+      gSiPos.push_back(origin + (siT / 2) * inward);
+      ++copy;
+    };
+
+    // Barrel: ~10 cm arc pitch around, 10 cm in z, kept 10 cm clear of the caps
+    const int nPhi = int(twopi * rIn / pitch);
+    const int nz = int((halfZ - 10. * cm) / pitch);
+    for (int k = -nz; k <= nz; ++k) {
+      for (int i = 0; i < nPhi; ++i) {
+        const G4double phi = twopi * i / nPhi;
+        const G4ThreeVector radial(std::cos(phi), std::sin(phi), 0.);
+        place(G4ThreeVector(rIn * radial.x(), rIn * radial.y(), k * pitch), -radial);
+      }
+    }
+    // End caps
+    const int nxy = int((rIn - rOut) / pitch);
+    for (int sgn : {-1, 1}) {
+      for (int i = -nxy - 1; i <= nxy + 1; ++i) {
+        for (int j = -nxy - 1; j <= nxy + 1; ++j) {
+          const G4double x = i * pitch, y = j * pitch;
+          if (std::hypot(x, y) + rOut > rIn) continue;
+          place(G4ThreeVector(x, y, sgn * halfZ), G4ThreeVector(0., 0., -sgn));
+        }
+      }
+    }
+    G4cout << "Sensor modules placed: " << copy << G4endl;
   }
 };
 
@@ -124,8 +250,26 @@ public:
     am->CreateNtupleDColumn("ekin_MeV");
     am->CreateNtupleDColumn("angle_deg");  // -1 if the muon never crossed the plane
     am->FinishNtuple();
+
+    // One row per event; vector columns list the silicon centres with >= 1 photon hit.
+    am->CreateNtuple("silicon", "Silicon sensors with photon hits");
+    am->CreateNtupleIColumn(1, "eventID");
+    am->CreateNtupleDColumn(1, "x_mm", gX);
+    am->CreateNtupleDColumn(1, "y_mm", gY);
+    am->CreateNtupleDColumn(1, "z_mm", gZ);
+    am->CreateNtupleIColumn(1, "nHits", gN);
+    am->CreateNtupleDColumn(1, "tFirst_ns", gTFirst);  // earliest photon arrival
+    am->CreateNtupleDColumn(1, "tMean_ns", gTMean);    // mean photon arrival time
+    am->FinishNtuple(1);
   }
+  static inline thread_local std::vector<double> gX, gY, gZ, gTFirst, gTMean;
+  static inline thread_local std::vector<int> gN;
   void BeginOfRunAction(const G4Run*) override {
+    // Let detected photons call the silicon sensitive detector (off by default)
+    auto* pv = G4OpticalPhoton::OpticalPhotonDefinition()->GetProcessManager()->GetProcessList();
+    for (std::size_t i = 0; i < pv->size(); ++i) {
+      if (auto* bp = dynamic_cast<G4OpBoundaryProcess*>((*pv)[i])) bp->SetInvokeSD(true);
+    }
     const char* out = std::getenv("MUON_OUT");
     G4AnalysisManager::Instance()->OpenFile(out ? out : "muonDecay.root");
   }
@@ -180,6 +324,27 @@ private:
   std::map<int, double> fAngle;  // trackID -> angle [deg]
 };
 
+class EventAction : public G4UserEventAction {
+public:
+  void BeginOfEventAction(const G4Event*) override { gSiHits.clear(); }
+  void EndOfEventAction(const G4Event* event) override {
+    RunAction::gX.clear(); RunAction::gY.clear(); RunAction::gZ.clear(); RunAction::gN.clear();
+    RunAction::gTFirst.clear(); RunAction::gTMean.clear();
+    for (const auto& [idx, n] : gSiHits) {
+      const auto& p = gSiPos[idx];
+      RunAction::gX.push_back(p.x() / mm);
+      RunAction::gY.push_back(p.y() / mm);
+      RunAction::gZ.push_back(p.z() / mm);
+      RunAction::gN.push_back(n.n);
+      RunAction::gTFirst.push_back(n.tFirst / ns);
+      RunAction::gTMean.push_back(n.tSum / n.n / ns);
+    }
+    auto* am = G4AnalysisManager::Instance();
+    am->FillNtupleIColumn(1, 0, event->GetEventID());
+    am->AddNtupleRow(1);
+  }
+};
+
 class ActionInitialization : public G4VUserActionInitialization {
 public:
   void BuildForMaster() const override { SetUserAction(new RunAction()); }
@@ -187,6 +352,7 @@ public:
     SetUserAction(new PrimaryGenerator());
     SetUserAction(new RunAction());
     SetUserAction(new SteppingAction());
+    SetUserAction(new EventAction());
   }
 };
 

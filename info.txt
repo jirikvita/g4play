@@ -1,0 +1,9 @@
+
+
+so how come now the mu- end position is saved? does it decay?
+
+No, it doesn't decay in the simulation. What's saved for mu- is where it stops and is captured.
+
+In Geant4 (FTFP_BERT) a mu- that comes to rest in water is ended by the muMinusCaptureAtRest process, not by Decay. In the 20-event mu- trace I checked, every stopped mu- ended that way and none had a Decay step.
+
+The saved row for a mu- is therefore its stopping point, with ekin_MeV = 0. Real bound mu- in water mostly decay in orbit (about 80%) and are captured by the nucleus only about 20% of the time. This simulation applies capture to all of them, so it doesn't reproduce that decay fraction.

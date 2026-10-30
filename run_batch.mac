@@ -1,0 +1,9 @@
+/run/initialize
+
+
+# e-, e+, mu-, mu+, pi-, pi+, proton, anti_proton
+/gun/particle pi+
+/gun/energy 800 MeV
+/run/beamOn 1000
+
+

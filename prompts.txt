@@ -1,0 +1,22 @@
+
+*** 23.20.2026
+
+fill with geant4 code establishing a 4mm thick stailess steel cyllinder of diameter 3.5m, height 4m. filled with water; add makefile using G4 installation in /home/qitek/install/geant4-v11.1.1-install/bin and add particle gun shooting particles along z axis in half height into the tank; make these switchable between electrons, muons, pions and protons and their antiparticles
+
+adjust the particle gunto shoot from -Radius -10cm from outside the tank aiming into the middle of the tank
+
+export to ROOT file a TTree with saved position of the last muon track point before it decayes, per event
+
+write a pyroot script, executable, in this directory, which plots from each ROOT file the distribution of x_mm and labels each curve by the muon energy
+
+add a python script that runs run.mac but for mu+ energies as [200, 300, 400, 500, 600, 800] MeV and always makes sure the ROOT file is named with corresponding tag
+
+
+
+
+
+*** 30.10.2026
+
+populate the inner walls as well as upper and lower circle with 8cm-diameter half-spherical shells made of 1mm thick glass, vacuum inside, and the spherical base be a 5mm thick silicon. Make their placement on grid spacing of 10cm. Make the silicon a senitive volume to collect signal from optical and UV photons in terms of their number hitting the silicon surface. Per event (generated particle), save to ROOT file 3D position of the center of the silicon with at least one such photon hit and the number of hits.
+
+create a python gui eventDisplayPMTs.py which would visualize the information on the number of detected photons in each PMT in 3D . Use dark background and color of each silicon plate mapped to number of photons. Make it a gui with Previous and Next button to go through the events in the ROOT file.
