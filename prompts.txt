@@ -20,3 +20,17 @@ add a python script that runs run.mac but for mu+ energies as [200, 300, 400, 50
 populate the inner walls as well as upper and lower circle with 8cm-diameter half-spherical shells made of 1mm thick glass, vacuum inside, and the spherical base be a 5mm thick silicon. Make their placement on grid spacing of 10cm. Make the silicon a senitive volume to collect signal from optical and UV photons in terms of their number hitting the silicon surface. Per event (generated particle), save to ROOT file 3D position of the center of the silicon with at least one such photon hit and the number of hits.
 
 create a python gui eventDisplayPMTs.py which would visualize the information on the number of detected photons in each PMT in 3D . Use dark background and color of each silicon plate mapped to number of photons. Make it a gui with Previous and Next button to go through the events in the ROOT file.
+
+
+
+TODO:
+name the ROOT file based on the PID and energy and required stats!
++ ==> Pos, c.f. events_piPos_E800MeV_10k.root
+
+To test data:
+Make addNoiseAndSmearToGeneratedRootFile.py
+To add Poisson(0.XY) and smear each signal to Poisson(Nobs)
+Add metadata tree this was already done and not to be applied twice!
+
+separate root files to train/ and test/
+

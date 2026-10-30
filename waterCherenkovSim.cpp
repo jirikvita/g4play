@@ -260,6 +260,7 @@ public:
     am->CreateNtupleIColumn(1, "nHits", gN);
     am->CreateNtupleDColumn(1, "tFirst_ns", gTFirst);  // earliest photon arrival
     am->CreateNtupleDColumn(1, "tMean_ns", gTMean);    // mean photon arrival time
+    am->CreateNtupleIColumn(1, "primaryPDG");          // PDG code of the generated particle
     am->FinishNtuple(1);
   }
   static inline thread_local std::vector<double> gX, gY, gZ, gTFirst, gTMean;
@@ -341,6 +342,9 @@ public:
     }
     auto* am = G4AnalysisManager::Instance();
     am->FillNtupleIColumn(1, 0, event->GetEventID());
+    // Column 7 follows eventID and the six vector columns
+    const auto* vtx = event->GetPrimaryVertex();
+    am->FillNtupleIColumn(1, 7, vtx && vtx->GetPrimary() ? vtx->GetPrimary()->GetPDGcode() : 0);
     am->AddNtupleRow(1);
   }
 };

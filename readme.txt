@@ -1,4 +1,15 @@
 
+Training NN (Python)
+====================
+
+Use the project virtual environment in this folder and install the required packages before running [trainNN.py](/home/qitek/work/github/g4play/trainNN.py):
+
+```
+cd /home/qitek/work/github/g4play
+/home/qitek/work/github/g4play/.venv/bin/pip install -r requirements.txt
+/home/qitek/work/github/g4play/.venv/bin/python trainNN.py
+```
+
 source /home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh
 cd /home/qitek/work/github/g4play
 make clean && make

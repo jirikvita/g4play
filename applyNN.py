@@ -42,7 +42,7 @@ def main() -> None:
     p.add_argument("--output", default=None, help="Output ROOT file (default: <input>_nnPID.root)")
     args = p.parse_args()
 
-    ckpt = torch.load(args.model, map_location="cpu")
+    ckpt = torch.load(args.model, map_location="cpu", weights_only=False)
     feature_names = ckpt["feature_names"]
     x_event_ids, x = build_matrix_for_feature_names(args.input, feature_names)
     mean = np.asarray(ckpt["input_mean"], dtype=np.float32)
