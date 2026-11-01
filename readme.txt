@@ -27,19 +27,19 @@ python3 nnTestAll.py --dir train_test
 ```
 
 For each tested ROOT input, [applyNN.py](/home/qitek/work/g4play/applyNN.py) also writes
-`*.energy_hist.csv`, `*.energy_hist.png`, and `*.energy_hist.pdf`. After all files are processed,
-[nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) creates
-`all_tests_energy_hists.pdf` in the selected `--dir`.
+`*.momentum_hist.csv`, `*.momentum_hist.png`, and `*.momentum_hist.pdf`. After all files are
+processed, [nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) creates
+`all_tests_momentum_hists.pdf` in the selected `--dir`.
 
-[trainNN.py](/home/qitek/work/g4play/trainNN.py) also writes an inferred-energy overlay plot for
+[trainNN.py](/home/qitek/work/g4play/trainNN.py) also writes an inferred-momentum overlay plot for
 the train/test splits:
-`pid_model.energy_overlay.png` and `pid_model.energy_overlay.pdf`
-(filled histograms with `alpha=0.3`, with true-energy labels).
+`pid_model.momentum_overlay.png` and `pid_model.momentum_overlay.pdf`
+(filled histograms with `alpha=0.3`, with true-momentum labels).
 
 [nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) also writes:
-`all_tests_inferred_energy_overlay.png` and `all_tests_inferred_energy_overlay.pdf`
+`all_tests_inferred_momentum_overlay.png` and `all_tests_inferred_momentum_overlay.pdf`
 with one filled histogram per tested ROOT file (`alpha=0.3`) and legend labels including the true
-energy from the filename momentum.
+momentum from the filename.
 
 source /home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh
 cd /home/qitek/work/github/g4play
