@@ -29,8 +29,11 @@ NAMES = {
     "e-": "eNeg", "e+": "ePos", "mu-": "muNeg", "mu+": "muPos",
     "pi-": "piNeg", "pi+": "piPos", "p": "pPos", "pbar": "pbarNeg",
 }
-DEFAULT_MOMENTA_MEV = [200] #, 300, 400, 500, 600, 800]
-G4_SH = os.environ.get("G4_SH", "/home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh")
+#DEFAULT_MOMENTA_MEV = [200, 300, 400, 500, 600, 700, 800]
+#DEFAULT_MOMENTA_MEV = [250, 350, 450,  550,  650, 700, 750]
+DEFAULT_MOMENTA_MEV = [200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800]
+#G4_SH = os.environ.get("G4_SH", "/home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh")
+G4_SH = os.environ.get("G4_SH", "/home/qitek/work/g4/geant4-v11.1.2-install/bin/geant4.sh")
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("momenta", nargs="*", type=float, help="beam momenta in MeV/c")

@@ -10,6 +10,37 @@ cd /home/qitek/work/github/g4play
 /home/qitek/work/github/g4play/.venv/bin/python trainNN.py
 ```
 
+Batch apply NN on a directory
+=============================
+
+Run [nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) to process all `.root` files except
+`*_nnPID.root` in `test_only_1k/` by default:
+
+```
+python3 nnTestAll.py
+```
+
+Pick another directory with `--dir`:
+
+```
+python3 nnTestAll.py --dir train_test
+```
+
+For each tested ROOT input, [applyNN.py](/home/qitek/work/g4play/applyNN.py) also writes
+`*.energy_hist.csv`, `*.energy_hist.png`, and `*.energy_hist.pdf`. After all files are processed,
+[nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) creates
+`all_tests_energy_hists.pdf` in the selected `--dir`.
+
+[trainNN.py](/home/qitek/work/g4play/trainNN.py) also writes an inferred-energy overlay plot for
+the train/test splits:
+`pid_model.energy_overlay.png` and `pid_model.energy_overlay.pdf`
+(filled histograms with `alpha=0.3`, with true-energy labels).
+
+[nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) also writes:
+`all_tests_inferred_energy_overlay.png` and `all_tests_inferred_energy_overlay.pdf`
+with one filled histogram per tested ROOT file (`alpha=0.3`) and legend labels including the true
+energy from the filename momentum.
+
 source /home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh
 cd /home/qitek/work/github/g4play
 make clean && make

@@ -17,8 +17,8 @@
 
 # e-, e+, mu-, mu+, pi-, pi+, proton, anti_proton
 /gun/particle mu+
-/gun/energy 800 MeV
-/run/beamOn 10
+/gun/energy 700 MeV
+/run/beamOn 10000
 
 # Interactive: VIS_DRIVER=OGL ./waterCherenkovSim run.mac -i
 

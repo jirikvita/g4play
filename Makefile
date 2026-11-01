@@ -1,4 +1,7 @@
-G4BIN ?= /home/qitek/install/geant4-v11.1.1-install/bin
+
+G4BIN ?= /home/qitek/work/g4/geant4-v11.1.2-install/bin
+
+#/home/qitek/install/geant4-v11.1.1-install/bin
 G4CONFIG := $(G4BIN)/geant4-config
 
 TARGET := waterCherenkovSim
