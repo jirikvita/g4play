@@ -26,6 +26,7 @@
 #include "G4UserRunAction.hh"
 #include "G4UserSteppingAction.hh"
 #include "G4AnalysisManager.hh"
+#include "G4Run.hh"
 #include "G4Step.hh"
 #include "G4Track.hh"
 #include "G4Event.hh"
@@ -37,6 +38,9 @@
 #include "G4VSensitiveDetector.hh"
 #include "G4SDManager.hh"
 #include "G4UserEventAction.hh"
+#include <filesystem>
+#include <mutex>
+#include <sstream>
 #include "G4OpticalSurface.hh"
 #include "G4LogicalSkinSurface.hh"
 #include "G4RotationMatrix.hh"
@@ -49,6 +53,9 @@
 #include <cstdlib>
 #include <map>
 #include <vector>
+
+#include "Randomize.hh"
+
 
 // Gun direction of the current event (per thread), used by the stepping action.
 thread_local G4ThreeVector gGunDir(1., 0., 0.);
@@ -213,6 +220,37 @@ private:
   }
 };
 
+// Gun settings seen by the worker threads, used by the master to name the output file.
+struct GunInfo {
+  std::mutex mtx;
+  bool valid = false;
+  int pdg = 0;
+  std::string name;
+  double ekinMeV = 0.;
+};
+static GunInfo gGunInfo;
+
+// e.g. events_piPos_E800MeV_10k.root (primary, charge sign, kinetic energy, number of events)
+static std::string autoOutputName(int nEvents) {
+  std::lock_guard<std::mutex> lock(gGunInfo.mtx);
+  if (!gGunInfo.valid) return "";
+  std::string part = gGunInfo.name;
+  const int a = std::abs(gGunInfo.pdg);
+  if (a == 11) part = "e";
+  else if (a == 13) part = "mu";
+  else if (a == 211) part = "pi";
+  else if (a == 2212) part = gGunInfo.pdg > 0 ? "p" : "pbar";
+  const auto* def = G4ParticleTable::GetParticleTable()->FindParticle(gGunInfo.pdg);
+  const double q = def ? def->GetPDGCharge() : 0.;
+  const char* sign = q > 0 ? "Pos" : (q < 0 ? "Neg" : "Neu");
+  std::ostringstream os;
+  os << "events_" << part << sign << "_E" << std::lround(gGunInfo.ekinMeV) << "MeV_";
+  if (nEvents >= 1000 && nEvents % 1000 == 0) os << nEvents / 1000 << "k";
+  else os << nEvents << "evts";
+  os << ".root";
+  return os.str();
+}
+
 class PrimaryGenerator : public G4VUserPrimaryGeneratorAction {
 public:
   PrimaryGenerator() : fGun(new G4ParticleGun(1)) {
@@ -225,6 +263,14 @@ public:
   ~PrimaryGenerator() override { delete fGun; }
   void GeneratePrimaries(G4Event* event) override {
     gGunDir = fGun->GetParticleMomentumDirection();
+    {
+      std::lock_guard<std::mutex> lock(gGunInfo.mtx);
+      const auto* def = fGun->GetParticleDefinition();
+      gGunInfo.valid = true;
+      gGunInfo.pdg = def->GetPDGEncoding();
+      gGunInfo.name = def->GetParticleName();
+      gGunInfo.ekinMeV = fGun->GetParticleEnergy() / MeV;
+    }
     fGun->GeneratePrimaryVertex(event);
   }
 
@@ -236,6 +282,8 @@ private:
 class RunAction : public G4UserRunAction {
 public:
   RunAction() {
+    G4Random::setTheSeed(123456789);
+
     auto* am = G4AnalysisManager::Instance();
     am->SetNtupleMerging(true);
     am->SetVerboseLevel(0);
@@ -266,6 +314,10 @@ public:
   static inline thread_local std::vector<double> gX, gY, gZ, gTFirst, gTMean;
   static inline thread_local std::vector<int> gN;
   void BeginOfRunAction(const G4Run*) override {
+    if (G4Threading::IsMasterThread()) {
+      std::lock_guard<std::mutex> lock(gGunInfo.mtx);
+      gGunInfo.valid = false;
+    }
     // Let detected photons call the silicon sensitive detector (off by default)
     auto* pv = G4OpticalPhoton::OpticalPhotonDefinition()->GetProcessManager()->GetProcessList();
     for (std::size_t i = 0; i < pv->size(); ++i) {
@@ -274,10 +326,19 @@ public:
     const char* out = std::getenv("MUON_OUT");
     G4AnalysisManager::Instance()->OpenFile(out ? out : "muonDecay.root");
   }
-  void EndOfRunAction(const G4Run*) override {
+  void EndOfRunAction(const G4Run* run) override {
     auto* am = G4AnalysisManager::Instance();
     am->Write();
     am->CloseFile();
+    // Without MUON_OUT, rename the default file once the master has merged all workers.
+    if (G4Threading::IsMasterThread() && !std::getenv("MUON_OUT")) {
+      const std::string name = autoOutputName(run->GetNumberOfEvent());
+      std::error_code ec;
+      if (!name.empty() && std::filesystem::exists("muonDecay.root")) {
+        std::filesystem::rename("muonDecay.root", name, ec);
+        G4cout << "Output file: " << (ec ? "muonDecay.root (rename failed)" : name) << G4endl;
+      }
+    }
   }
 };
 

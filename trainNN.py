@@ -21,9 +21,9 @@ from torch.utils.data import DataLoader, TensorDataset
 from pid_features import extract_event_features, pdg_label
 
 DEFAULT_INPUTS = [
-    "events_muPos_E800MeV_1k.root",
-    "events_piPos_E800MeV_1k.root",
-    "events_ePos_E800MeV_1k.root",
+    "events_muPos_E800MeV_10k.root",
+    "events_piPos_E800MeV_10k.root",
+    "events_ePos_E800MeV_10k.root",
 ]
 
 
@@ -309,6 +309,7 @@ def main() -> None:
         "hidden": hidden,
         "dropout": args.dropout,
         "classes": classes,
+        "feature_names": list(feature_names),
         "input_mean": mean.astype(np.float32),
         "input_std": std.astype(np.float32),
         "seed": args.seed,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run run.mac at several beam momenta; each output is muonDecay_p<P>MeV.root.
+"""Run run.mac at several beam momenta; each output is events_<particle><Pos|Neg>_p<P>MeV_<N>.root.
 
 Usage: ./run_scan.py [-n] [-p PARTICLE] [P1 P2 ...]   (momenta in MeV/c; default below)
 PARTICLE is one of: e-, e+, mu-, mu+, pi-, pi+, p, pbar (default mu+).
@@ -24,6 +24,10 @@ PARTICLES = {
     "mu-": "mu-", "mu+": "mu+",
     "pi-": "pi-", "pi+": "pi+",
     "p": "proton", "pbar": "anti_proton",
+}
+NAMES = {
+    "e-": "eNeg", "e+": "ePos", "mu-": "muNeg", "mu+": "muPos",
+    "pi-": "piNeg", "pi+": "piPos", "p": "pPos", "pbar": "pbarNeg",
 }
 DEFAULT_MOMENTA_MEV = [200] #, 300, 400, 500, 600, 800]
 G4_SH = os.environ.get("G4_SH", "/home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh")
@@ -60,7 +64,8 @@ def show_bar(frac, text):
 
 for k, p in enumerate(momenta):
     tag = f"{p:g}"
-    out_name = f"muonDecay_p{tag}MeV.root"
+    nev_tag = f"{nevents // 1000}k" if nevents and nevents % 1000 == 0 else f"{nevents}evts"
+    out_name = f"events_{NAMES[args.particle]}_p{tag}MeV_{nev_tag}.root"
 
     macro, n1 = re.subn(r"^/gun/particle .*$", f"/gun/particle {particle}", template, flags=re.MULTILINE)
     # momentumAmp must follow /gun/particle: it derives kinetic energy from the particle mass

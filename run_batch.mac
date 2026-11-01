@@ -2,8 +2,8 @@
 
 
 # e-, e+, mu-, mu+, pi-, pi+, proton, anti_proton
-/gun/particle mu+
+/gun/particle e+
 /gun/energy 800 MeV
-/run/beamOn 10000
+/run/beamOn 1000
 
 

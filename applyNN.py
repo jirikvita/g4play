@@ -12,7 +12,7 @@ import torch
 import uproot
 from torch import nn
 
-from pid_features import build_matrix_for_feature_names
+from pid_features import build_matrix_for_feature_names, extract_event_features
 
 
 class MLP(nn.Module):
@@ -43,8 +43,17 @@ def main() -> None:
     args = p.parse_args()
 
     ckpt = torch.load(args.model, map_location="cpu", weights_only=False)
-    feature_names = ckpt["feature_names"]
-    x_event_ids, x = build_matrix_for_feature_names(args.input, feature_names)
+    feature_names = ckpt.get("feature_names")
+    if feature_names is None:
+        # Older checkpoints lack names; the sorted names depend only on the tree layout.
+        _, _, feature_names, _ = extract_event_features(args.input)
+        if len(feature_names) != int(ckpt["input_dim"]):
+            raise SystemExit(
+                f"Checkpoint has no feature_names and input yields {len(feature_names)} "
+                f"features, expected {ckpt['input_dim']}; retrain with the current trainNN.py."
+            )
+        print("warning: checkpoint has no feature_names; using names derived from the input file")
+    x_event_ids, x, _truth_pdg = build_matrix_for_feature_names(args.input, feature_names)
     mean = np.asarray(ckpt["input_mean"], dtype=np.float32)
     std = np.asarray(ckpt["input_std"], dtype=np.float32)
     std[std < 1e-8] = 1.0
