@@ -12,9 +12,6 @@ write a pyroot script, executable, in this directory, which plots from each ROOT
 add a python script that runs run.mac but for mu+ energies as [200, 300, 400, 500, 600, 800] MeV and always makes sure the ROOT file is named with corresponding tag
 
 
-
-
-
 *** 30.10.2026
 
 populate the inner walls as well as upper and lower circle with 8cm-diameter half-spherical shells made of 1mm thick glass, vacuum inside, and the spherical base be a 5mm thick silicon. Make their placement on grid spacing of 10cm. Make the silicon a senitive volume to collect signal from optical and UV photons in terms of their number hitting the silicon surface. Per event (generated particle), save to ROOT file 3D position of the center of the silicon with at least one such photon hit and the number of hits.
@@ -22,15 +19,36 @@ populate the inner walls as well as upper and lower circle with 8cm-diameter hal
 create a python gui eventDisplayPMTs.py which would visualize the information on the number of detected photons in each PMT in 3D . Use dark background and color of each silicon plate mapped to number of photons. Make it a gui with Previous and Next button to go through the events in the ROOT file.
 
 
+*** 1.11.2026
 
-TODO:
-name the ROOT file based on the PID and energy and required stats!
-+ ==> Pos, c.f. events_piPos_E800MeV_10k.root
+create trainNN.py which would use pytorch based NN with tunable architecture to learn on events_muPos_E800MeV_1k.root (muon), events_piPos_E800MeV_1k.root (pion) and events_ePos_E800MeV_1k.root (electron) sample to provide the mu/pi/el particle ID. Use 1/2 for train and validation (90% and 10% split) and 1/2 for testing. Export the model and create a new applyNN.py to run the model on a desired ROOT file. Use all the informatio in the ROOT file.
+add plots like loss function evolution over epochs, and then train and test set results: confusion matrix, TPRs, FPRs
 
-To test data:
-Make addNoiseAndSmearToGeneratedRootFile.py
-To add Poisson(0.XY) and smear each signal to Poisson(Nobs)
-Add metadata tree this was already done and not to be applied twice!
+in train and apply, use the PDGID labels internally for dictionaries etc, too, and truth PDGID info label from the ttree per event
 
-separate root files to train/ and test/
+update the training to use all e/mu/pi samples named *_10k.root and update the NN to predict also the energy; then modiy the applyNN accordingly
+
+in applyNN, print afyer PDGID also the particle name; also, output a histogram of the inferred energies as csv as well as png;
+
+
+*** 2.11.2026
+
+also save inferred energy in train and test dataset in trainNN as alpha=0.3 filled 1D histos into one same plot; make a similar plot also by nnTestAll, add labels indicating the true energy
+
+plot the inferred momentum vs true momentum as scatter plot from the nnPID ROOT files into one plot for all ROOT files under test in nnTestAll ; also plot momentum residuals (inferred - true)/true ; next, prepare also to other PIDs like (anti) protons and charged kaons
+
+as for residuals, no scatter points, but show by markers the mean, median and 0.25 and 0.75 quantiles; make the residuals y axis in range [-1, 2.5]
+
+also create confusion matrices per tested momentum, plot on a grid plot
+
+the confusion matrices seem to be wrong, logs say every particle is correctly identified in around 99% while the patrices seem to swap e+ and mu+, please recheck
+
+add optional feature (best via mac file, true by defauls) to smear the number of hits in the silicon detectors to be modified to a draw from Poisson(NoriginalHits)
+
+
+*** 3.11.2026
+
+update the area to use cmake, move sources to src/ and if hostname is jirikvita, use g4bin path as /home/qitek/install/geant4-v11.1.1-install/bin/home/qitek/install/geant4-v11.1.1-install/bin ; make the executable be compiled into bin/ subdir and update the the simulation calling scripts; also, move all mac files ito configs/ and agan update calling scripts using them
+
+add doc/ directory and fill it with latex main_Eng.tex and main_Cz.tex containg, in respective languages, the description of the geometry models in geant4, the call structure for list of momenta, the poisson smearing and noise, inscude figures in EvtDispl/ Screenshots/ and compile the pdf; also describe the NN architecture and hyperparameters
 
