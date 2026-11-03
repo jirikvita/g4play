@@ -22,6 +22,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from pid_features import extract_event_features, pdg_label
 
 DEFAULT_INPUT_PATTERN = "train_test/events_*_10k.root"
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
 
 
 class MLP(nn.Module):
@@ -65,8 +67,10 @@ def model_out_with_hidden(path: Path, hidden: Sequence[int]) -> Path:
 
 
 def model_out_in_models_dir(path: Path) -> Path:
-    models_dir = Path("models")
+    models_dir = PROJECT_ROOT / "models"
     if path.parts and path.parts[0] == "models":
+        return PROJECT_ROOT / path
+    if path.is_absolute():
         return path
     return models_dir / path.name
 
@@ -316,7 +320,7 @@ def build_dataset(paths: Sequence[str]) -> Tuple[np.ndarray, np.ndarray, np.ndar
 
 
 def discover_default_inputs() -> List[str]:
-    paths = sorted(Path(".").glob(DEFAULT_INPUT_PATTERN))
+    paths = sorted(PROJECT_ROOT.glob(DEFAULT_INPUT_PATTERN))
     selected = [
         str(p)
         for p in paths
@@ -325,7 +329,7 @@ def discover_default_inputs() -> List[str]:
     if not selected:
         raise RuntimeError(
             "No default inputs found. Expected particle files matching "
-            f"{DEFAULT_INPUT_PATTERN} in the current directory."
+            f"{DEFAULT_INPUT_PATTERN} in the project directory."
         )
     return selected
 
@@ -346,7 +350,7 @@ def main() -> None:
             "Class labels are primaryPDG; momentum target is derived from file name."
         ),
     )
-    p.add_argument("--hidden", default="256,128,128", help="Comma-separated hidden layer sizes")
+    p.add_argument("--hidden", default="256,128", help="Comma-separated hidden layer sizes")
     p.add_argument("--dropout", type=float, default=0.1)
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch-size", type=int, default=64)

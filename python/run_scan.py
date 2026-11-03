@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run configs/run.mac at several beam momenta; each output is events_<particle><Pos|Neg>_p<P>MeV_<N>[tags].root.
 
-Usage: ./run_scan.py [-n] [-p PARTICLE] [P1 P2 ...]   (momenta in MeV/c; default below)
+Usage: ./python/run_scan.py [-n] [-p PARTICLE] [P1 P2 ...]   (momenta in MeV/c; default below)
 PARTICLE is one of: e-, e+, mu-, mu+, pi-, pi+, p, pbar (default mu+).
 -n / --dry-run only prints the commands and generated macros; nothing is run.
 The beam momentum (not kinetic energy) is set with /gun/momentumAmp.
@@ -50,8 +50,9 @@ particle = PARTICLES[args.particle]
 momenta = args.momenta or DEFAULT_MOMENTA_MEV
 
 here = Path(__file__).resolve().parent
+project_root = here.parent
 template = "\n".join(
-    line for line in (here / "configs" / "run.mac").read_text().splitlines()
+    line for line in (project_root / "configs" / "run.mac").read_text().splitlines()
     # scans run without visualization, so no g4_*.wrl files are written
     if not line.startswith("/vis/") and not line.startswith("/control/getEnv VIS_DRIVER")
 )
@@ -139,7 +140,7 @@ for k, p in enumerate(momenta):
             show_bar(k / len(momenta), label)
         else:
             print(f"=== {label}", flush=True)
-        proc = subprocess.Popen(["bash", "-c", command(macro_path)], cwd=here, env=env,
+        proc = subprocess.Popen(["bash", "-c", command(macro_path)], cwd=project_root, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         seen = 0
         for line in proc.stdout:
@@ -156,7 +157,7 @@ for k, p in enumerate(momenta):
         if is_tty:
             print()
         sys.exit(f"run failed for p = {tag} MeV/c:\n{''.join(tail)}")
-    if not (here / out_name).exists():
+    if not (project_root / out_name).exists():
         if is_tty:
             print()
         sys.exit(f"{out_name} was not created (no muons stopped/decayed?)")

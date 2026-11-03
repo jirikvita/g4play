@@ -96,8 +96,8 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--apply-script",
-        default="applyNN.py",
-        help="Path to applyNN.py (default: applyNN.py)",
+        default="python/applyNN.py",
+        help="Path to applyNN.py (default: python/applyNN.py)",
     )
     p.add_argument(
         "--python",
@@ -498,7 +498,11 @@ def create_summary_pdf(files: list[Path], out_pdf: Path) -> tuple[int, int]:
 
 def main() -> None:
     args = parse_args()
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
     input_dir = Path(args.dir)
+    if not input_dir.is_absolute():
+        input_dir = project_root / input_dir
     if not input_dir.is_dir():
         raise SystemExit(f"Input directory not found: {input_dir}")
 
@@ -509,7 +513,11 @@ def main() -> None:
         return
 
     apply_script = Path(args.apply_script)
+    if not apply_script.is_absolute():
+        apply_script = project_root / apply_script
     model = Path(args.model)
+    if not model.is_absolute():
+        model = project_root / model
     if not apply_script.exists():
         raise SystemExit(f"applyNN script not found: {apply_script}")
     if not model.exists():
@@ -537,7 +545,7 @@ def main() -> None:
             str(out_root),
         ]
         print(f"[{i}/{len(files)}] run {' '.join(cmd)}")
-        rc = subprocess.run(cmd, check=False).returncode
+        rc = subprocess.run(cmd, cwd=project_root, check=False).returncode
         if rc != 0:
             failed.append(root_path)
             print(f"  -> FAILED (exit code {rc})")

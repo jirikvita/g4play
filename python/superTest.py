@@ -87,9 +87,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    script_path = Path(__file__).with_name("nnTestAll.py")
-    html_script = Path(__file__).with_name("scripts").joinpath("CreateHTMLpage_noConv.sh")
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    script_path = script_dir / "nnTestAll.py"
+    html_script = project_root / "scripts" / "CreateHTMLpage_noConv.sh"
     model = Path(args.model)
+    if not model.is_absolute():
+        model = project_root / model
     model_name = model.name
     model_name_tag = model_tag(model)
 
@@ -102,9 +106,11 @@ def main() -> int:
 
     for directory in args.dirs:
         test_dir = Path(directory)
+        if not test_dir.is_absolute():
+            test_dir = project_root / test_dir
         cmd = [sys.executable, str(script_path), "--model", str(model), "--dir", str(test_dir)]
         print("Running:", " ".join(cmd))
-        result = subprocess.run(cmd, check=False)
+        result = subprocess.run(cmd, cwd=project_root, check=False)
         if result.returncode != 0:
             print(f"Error: nnTestAll.py failed for '{directory}' (exit code {result.returncode})")
             return result.returncode

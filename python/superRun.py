@@ -3,10 +3,10 @@
 
 By default, starts scans for e+, mu+, and pi+ at the same momenta.
 Usage examples:
-  python3 superRun.py
-  python3 superRun.py 200 300 400
-  python3 superRun.py --particles mu+ pi+ 250 350 450
-  python3 superRun.py -n 200
+  python3 python/superRun.py
+  python3 python/superRun.py 200 300 400
+  python3 python/superRun.py --particles mu+ pi+ 250 350 450
+  python3 python/superRun.py -n 200
 """
 
 import argparse
@@ -18,6 +18,8 @@ DEFAULT_PARTICLES = ["e+", "mu+", "pi+"]
 
 
 def main() -> int:
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("momenta", nargs="*", type=float, help="beam momenta in MeV/c")
     parser.add_argument(
@@ -30,7 +32,7 @@ def main() -> int:
     parser.add_argument("-n", "--dry-run", action="store_true", help="only print generated commands/macros")
     args = parser.parse_args()
 
-    run_scan = Path(__file__).resolve().with_name("run_scan.py")
+    run_scan = script_dir / "run_scan.py"
     if not run_scan.exists():
         print(f"Missing {run_scan}", file=sys.stderr)
         return 2
@@ -44,7 +46,7 @@ def main() -> int:
                 cmd.append("-n")
             cmd.extend(momenta_args)
             print(f"[superRun] starting {particle}: {' '.join(cmd)}", flush=True)
-            procs.append((particle, subprocess.Popen(cmd, cwd=run_scan.parent)))
+            procs.append((particle, subprocess.Popen(cmd, cwd=project_root)))
     except Exception:
         for _, proc in procs:
             proc.terminate()
