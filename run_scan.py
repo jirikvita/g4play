@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run run.mac at several beam momenta; each output is events_<particle><Pos|Neg>_p<P>MeV_<N>[tags].root.
+"""Run configs/run.mac at several beam momenta; each output is events_<particle><Pos|Neg>_p<P>MeV_<N>[tags].root.
 
 Usage: ./run_scan.py [-n] [-p PARTICLE] [P1 P2 ...]   (momenta in MeV/c; default below)
 PARTICLE is one of: e-, e+, mu-, mu+, pi-, pi+, p, pbar (default mu+).
@@ -34,8 +34,11 @@ NAMES = {
 #DEFAULT_MOMENTA_MEV = [200, 300, 400, 500, 600, 700, 800]
 #DEFAULT_MOMENTA_MEV = [250, 350, 450,  550,  650, 700, 750]
 DEFAULT_MOMENTA_MEV = [200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800]
-#G4_SH = os.environ.get("G4_SH", "/home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh")
-G4_SH = os.environ.get("G4_SH", "/home/qitek/work/g4/geant4-v11.1.2-install/bin/geant4.sh")
+if os.uname().nodename == "jirikvita":
+    _default_g4_sh = "/home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh"
+else:
+    _default_g4_sh = "/home/qitek/work/g4/geant4-v11.1.2-install/bin/geant4.sh"
+G4_SH = os.environ.get("G4_SH", _default_g4_sh)
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("momenta", nargs="*", type=float, help="beam momenta in MeV/c")
@@ -48,7 +51,7 @@ momenta = args.momenta or DEFAULT_MOMENTA_MEV
 
 here = Path(__file__).resolve().parent
 template = "\n".join(
-    line for line in (here / "run.mac").read_text().splitlines()
+    line for line in (here / "configs" / "run.mac").read_text().splitlines()
     # scans run without visualization, so no g4_*.wrl files are written
     if not line.startswith("/vis/") and not line.startswith("/control/getEnv VIS_DRIVER")
 )
@@ -107,14 +110,14 @@ for k, p in enumerate(momenta):
     macro, n2 = re.subn(r"^/gun/(?:energy|momentumAmp) .*$", f"/gun/momentumAmp {tag} MeV",
                         macro, flags=re.MULTILINE)
     if not (n1 and n2):
-        sys.exit("run.mac must contain /gun/particle and /gun/energy (or /gun/momentumAmp) lines")
+        sys.exit("configs/run.mac must contain /gun/particle and /gun/energy (or /gun/momentumAmp) lines")
     if nevents:  # ask Geant4 for ~200 progress messages per run
         macro = re.sub(r"^/run/beamOn", f"/run/printProgress {max(1, nevents // 200)}\n/run/beamOn",
                        macro, count=1, flags=re.MULTILINE)
     out_name = f"events_{NAMES[args.particle]}_p{tag}MeV_{nev_tag}{_output_suffix_from_macro(macro)}.root"
 
     def command(macro_path):
-        return f"source {shlex.quote(G4_SH)} && exec ./waterCherenkovSim {shlex.quote(macro_path)}"
+        return f"source {shlex.quote(G4_SH)} && exec ./bin/waterCherenkovSim {shlex.quote(macro_path)}"
 
     env = dict(os.environ, MUON_OUT=out_name)
     label = f"[{k + 1}/{len(momenta)}] {particle} p = {tag} MeV/c -> {out_name}"

@@ -83,8 +83,9 @@ python3 superRun.py -n 200
 
 source /home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh
 cd /home/qitek/work/github/g4play
-make clean && make
-VIS_DRIVER=OGL ./waterCherenkovSim
+cmake -S . -B build
+cmake --build build -j
+VIS_DRIVER=OGL ./bin/waterCherenkovSim
 
 and in the command line of the GUI:
 
@@ -114,9 +115,9 @@ Optional `/g4play/silicon/addNoise true` adds Poisson noise per module with mean
 
 
 
-./waterCherenkovSim run.mac now creates muonDecay.root (about 47 KB). The muonDecay tree has 100 entries, one per event, for the 100 mu- at 300 MeV in your run.mac.
+./bin/waterCherenkovSim configs/run.mac now creates muonDecay.root (about 47 KB). The muonDecay tree has 100 entries, one per event, for the 100 mu- at 300 MeV in your configs/run.mac.
 
-The first run didn't create the file because of the mu- in your current run.mac. In Geant4 a stopped mu- ends in muMinusCaptureAtRest and never gets a Decay step. With 100 mu- no rows
+The first run didn't create the file because of the mu- in your current configs/run.mac. In Geant4 a stopped mu- ends in muMinusCaptureAtRest and never gets a Decay step. With 100 mu- no rows
 
 
 

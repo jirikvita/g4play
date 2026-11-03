@@ -25,4 +25,4 @@
 /gun/energy 700 MeV
 /run/beamOn 10000
 
-# Interactive: VIS_DRIVER=OGL ./waterCherenkovSim run.mac -i
+# Interactive: VIS_DRIVER=OGL ./bin/waterCherenkovSim configs/run.mac -i

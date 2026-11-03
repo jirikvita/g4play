@@ -1,5 +1,5 @@
 // Water Cherenkov tank: 4 mm stainless steel cylinder (D=3.5 m, H=4 m) filled with water.
-// Usage: ./waterCherenkovSim [macro.mac]
+// Usage: ./bin/waterCherenkovSim [macro.mac]
 // Switch particle with /gun/particle e-|e+|mu-|mu+|pi-|pi+|proton|anti_proton and /gun/energy.
 
 #include "G4RunManagerFactory.hh"
@@ -474,7 +474,7 @@ public:
   }
 };
 
-// Usage: ./waterCherenkovSim [macro.mac] [-i]   (-i keeps the viewer open after the macro)
+// Usage: ./bin/waterCherenkovSim [macro.mac] [-i]   (-i keeps the viewer open after the macro)
 int main(int argc, char** argv) {
   G4String macro;
   bool interactive = (argc == 1);
