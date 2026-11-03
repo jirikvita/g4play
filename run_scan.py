@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Run run.mac at several beam momenta; each output is events_<particle><Pos|Neg>_p<P>MeV_<N>.root.
+"""Run run.mac at several beam momenta; each output is events_<particle><Pos|Neg>_p<P>MeV_<N>[tags].root.
 
 Usage: ./run_scan.py [-n] [-p PARTICLE] [P1 P2 ...]   (momenta in MeV/c; default below)
 PARTICLE is one of: e-, e+, mu-, mu+, pi-, pi+, p, pbar (default mu+).
 -n / --dry-run only prints the commands and generated macros; nothing is run.
 The beam momentum (not kinetic energy) is set with /gun/momentumAmp.
 Override the Geant4 environment script with G4_SH=/path/to/geant4.sh.
+Optional filename tags are appended when enabled in macro settings:
+_PoissSmear and/or _addNoise{nu}.
 """
 import argparse
 import os
@@ -57,6 +59,37 @@ EVENT = re.compile(r"--> Event (\d+) starts")
 is_tty = sys.stdout.isatty()
 
 
+def _parse_bool_setting(text: str, cmd: str, default: bool) -> bool:
+    m = re.search(rf"^{re.escape(cmd)}\s+(true|false)\s*$", text, flags=re.MULTILINE)
+    if not m:
+        return default
+    return m.group(1) == "true"
+
+
+def _parse_float_setting(text: str, cmd: str, default: float) -> float:
+    m = re.search(rf"^{re.escape(cmd)}\s+([0-9]*\.?[0-9]+)\s*$", text, flags=re.MULTILINE)
+    if not m:
+        return default
+    return float(m.group(1))
+
+
+def _format_noise_nu(nu: float) -> str:
+    s = f"{nu:.6f}".rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
+def _output_suffix_from_macro(text: str) -> str:
+    smear = _parse_bool_setting(text, "/g4play/silicon/smearPoissonHits", True)
+    add_noise = _parse_bool_setting(text, "/g4play/silicon/addNoise", False)
+    noise_nu = _parse_float_setting(text, "/g4play/silicon/noiseNu", 0.4)
+    suffix = ""
+    if smear:
+        suffix += "_PoissSmear"
+    if add_noise:
+        suffix += f"_addNoise{_format_noise_nu(noise_nu)}"
+    return suffix
+
+
 def show_bar(frac, text):
     width = 30
     filled = int(width * frac)
@@ -68,7 +101,6 @@ def show_bar(frac, text):
 for k, p in enumerate(momenta):
     tag = f"{p:g}"
     nev_tag = f"{nevents // 1000}k" if nevents and nevents % 1000 == 0 else f"{nevents}evts"
-    out_name = f"events_{NAMES[args.particle]}_p{tag}MeV_{nev_tag}.root"
 
     macro, n1 = re.subn(r"^/gun/particle .*$", f"/gun/particle {particle}", template, flags=re.MULTILINE)
     # momentumAmp must follow /gun/particle: it derives kinetic energy from the particle mass
@@ -79,6 +111,7 @@ for k, p in enumerate(momenta):
     if nevents:  # ask Geant4 for ~200 progress messages per run
         macro = re.sub(r"^/run/beamOn", f"/run/printProgress {max(1, nevents // 200)}\n/run/beamOn",
                        macro, count=1, flags=re.MULTILINE)
+    out_name = f"events_{NAMES[args.particle]}_p{tag}MeV_{nev_tag}{_output_suffix_from_macro(macro)}.root"
 
     def command(macro_path):
         return f"source {shlex.quote(G4_SH)} && exec ./waterCherenkovSim {shlex.quote(macro_path)}"

@@ -1,7 +1,11 @@
 /run/initialize
+# Optional silicon readout setting (default is true): Poisson-smear each module hit count.
+/g4play/silicon/smearPoissonHits true
+# Optional silicon readout noise (default addNoise=false, noiseNu=0.4 photons/module).
+/g4play/silicon/addNoise false
+/g4play/silicon/noiseNu 0.4
 
 # e-, e+, mu-, mu+, pi-, pi+, proton, anti_proton
 /gun/particle mu+
 /gun/energy 800 MeV
 /run/beamOn 100
-

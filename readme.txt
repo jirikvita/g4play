@@ -41,6 +41,28 @@ the train/test splits:
 with one filled histogram per tested ROOT file (`alpha=0.3`) and legend labels including the true
 momentum from the filename.
 
+Parallel Geant4 scans
+=====================
+
+Use [superRun.py](/home/qitek/work/g4play/superRun.py) to run [run_scan.py](/home/qitek/work/g4play/run_scan.py)
+for multiple particle types simultaneously. Defaults to `e+`, `mu+`, and `pi+`:
+
+```
+python3 superRun.py
+```
+
+With custom momenta:
+
+```
+python3 superRun.py 200 300 400
+```
+
+Dry-run only:
+
+```
+python3 superRun.py -n 200
+```
+
 source /home/qitek/install/geant4-v11.1.1-install/bin/geant4.sh
 cd /home/qitek/work/github/g4play
 make clean && make
@@ -50,7 +72,16 @@ and in the command line of the GUI:
 
 /gun/particle mu-
 /gun/energy 1 GeV
+/g4play/silicon/smearPoissonHits true
+/g4play/silicon/addNoise false
+/g4play/silicon/noiseNu 0.4
 /run/beamOn 1
+
+The silicon readout command `/g4play/silicon/smearPoissonHits` is optional and defaults to `true`.
+Set it to `false` to store the original (unsmeared) per-module hit counts.
+When Poisson smearing is enabled, output ROOT filenames get the suffix `_PoissSmear`.
+Optional `/g4play/silicon/addNoise true` adds Poisson noise per module with mean
+`/g4play/silicon/noiseNu` (default `0.4`), and the output filename gets suffix `_addNoise{nu}`.
 
 
 # exclude photons from view:

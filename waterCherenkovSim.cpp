@@ -34,11 +34,13 @@
 #include "G4VProcess.hh"
 #include "G4OpBoundaryProcess.hh"
 #include "G4ProcessManager.hh"
+#include "G4GenericMessenger.hh"
 #include "G4Sphere.hh"
 #include "G4VSensitiveDetector.hh"
 #include "G4SDManager.hh"
 #include "G4UserEventAction.hh"
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include "G4OpticalSurface.hh"
@@ -48,9 +50,11 @@
 #include "G4PhysicalConstants.hh"
 #include "G4TouchableHistory.hh"
 #include "G4OpticalPhoton.hh"
+#include "G4Poisson.hh"
 
 #include <algorithm>
 #include <cstdlib>
+#include <iomanip>
 #include <map>
 #include <vector>
 
@@ -59,6 +63,13 @@
 
 // Gun direction of the current event (per thread), used by the stepping action.
 thread_local G4ThreeVector gGunDir(1., 0., 0.);
+
+struct SiliconReadoutConfig {
+  G4bool smearPoissonHits = true;
+  G4bool addNoise = false;
+  G4double noiseNu = 0.4;
+};
+SiliconReadoutConfig gSiliconReadoutConfig;
 
 // Silicon centre of every photon sensor module (index = copy number of the vacuum volume).
 std::vector<G4ThreeVector> gSiPos;
@@ -230,6 +241,15 @@ struct GunInfo {
 };
 static GunInfo gGunInfo;
 
+static std::string formatNoiseNuForTag(double nu) {
+  std::ostringstream os;
+  os << std::fixed << std::setprecision(6) << nu;
+  std::string nuText = os.str();
+  while (!nuText.empty() && nuText.back() == '0') nuText.pop_back();
+  if (!nuText.empty() && nuText.back() == '.') nuText.pop_back();
+  return nuText.empty() ? "0" : nuText;
+}
+
 // e.g. events_piPos_E800MeV_10k.root (primary, charge sign, kinetic energy, number of events)
 static std::string autoOutputName(int nEvents) {
   std::lock_guard<std::mutex> lock(gGunInfo.mtx);
@@ -247,6 +267,10 @@ static std::string autoOutputName(int nEvents) {
   os << "events_" << part << sign << "_E" << std::lround(gGunInfo.ekinMeV) << "MeV_";
   if (nEvents >= 1000 && nEvents % 1000 == 0) os << nEvents / 1000 << "k";
   else os << nEvents << "evts";
+  if (gSiliconReadoutConfig.smearPoissonHits) os << "_PoissSmear";
+  if (gSiliconReadoutConfig.addNoise) {
+    os << "_addNoise" << formatNoiseNuForTag(gSiliconReadoutConfig.noiseNu);
+  }
   os << ".root";
   return os.str();
 }
@@ -299,7 +323,7 @@ public:
     am->CreateNtupleDColumn("angle_deg");  // -1 if the muon never crossed the plane
     am->FinishNtuple();
 
-    // One row per event; vector columns list the silicon centres with >= 1 photon hit.
+    // One row per event; vector columns list the silicon centres with >= 1 saved hit.
     am->CreateNtuple("silicon", "Silicon sensors with photon hits");
     am->CreateNtupleIColumn(1, "eventID");
     am->CreateNtupleDColumn(1, "x_mm", gX);
@@ -392,14 +416,43 @@ public:
   void EndOfEventAction(const G4Event* event) override {
     RunAction::gX.clear(); RunAction::gY.clear(); RunAction::gZ.clear(); RunAction::gN.clear();
     RunAction::gTFirst.clear(); RunAction::gTMean.clear();
-    for (const auto& [idx, n] : gSiHits) {
+    const bool applyNoiseAllPmts = gSiliconReadoutConfig.addNoise;
+    const int nModules = applyNoiseAllPmts ? static_cast<int>(gSiPos.size()) : 0;
+    const int begin = applyNoiseAllPmts ? 0 : -1;
+    const int end = applyNoiseAllPmts ? nModules : -1;
+
+    auto fillModule = [&](int idx, const SiHit& h) {
+      int nHits = h.n;
+      if (gSiliconReadoutConfig.smearPoissonHits) {
+        nHits = static_cast<int>(G4Poisson(static_cast<G4double>(h.n)));
+      }
+      if (gSiliconReadoutConfig.addNoise) {
+        nHits += static_cast<int>(G4Poisson(gSiliconReadoutConfig.noiseNu));
+      }
+      if (nHits <= 0) return;
       const auto& p = gSiPos[idx];
       RunAction::gX.push_back(p.x() / mm);
       RunAction::gY.push_back(p.y() / mm);
       RunAction::gZ.push_back(p.z() / mm);
-      RunAction::gN.push_back(n.n);
-      RunAction::gTFirst.push_back(n.tFirst / ns);
-      RunAction::gTMean.push_back(n.tSum / n.n / ns);
+      RunAction::gN.push_back(nHits);
+      if (h.n > 0) {
+        RunAction::gTFirst.push_back(h.tFirst / ns);
+        RunAction::gTMean.push_back(h.tSum / h.n / ns);
+      } else {
+        RunAction::gTFirst.push_back(-1.);
+        RunAction::gTMean.push_back(-1.);
+      }
+    };
+
+    if (applyNoiseAllPmts) {
+      for (int idx = begin; idx < end; ++idx) {
+        const auto it = gSiHits.find(idx);
+        fillModule(idx, it != gSiHits.end() ? it->second : SiHit{});
+      }
+    } else {
+      for (const auto& [idx, h] : gSiHits) {
+        fillModule(idx, h);
+      }
     }
     auto* am = G4AnalysisManager::Instance();
     am->FillNtupleIColumn(1, 0, event->GetEventID());
@@ -434,6 +487,17 @@ int main(int argc, char** argv) {
   setenv("VIS_DRIVER", interactive ? "OGL" : "VRML2FILE", 0);
   // Pass argc=1 so the session type is not guessed from the macro name.
   G4UIExecutive* ui = interactive ? new G4UIExecutive(1, argv) : nullptr;
+  auto siliconReadoutMessenger = std::make_unique<G4GenericMessenger>(
+      &gSiliconReadoutConfig, "/g4play/silicon/", "Silicon readout controls");
+  siliconReadoutMessenger->DeclareProperty(
+      "smearPoissonHits", gSiliconReadoutConfig.smearPoissonHits,
+      "If true (default), each silicon detector hit count is replaced with Poisson(NoriginalHits).");
+  siliconReadoutMessenger->DeclareProperty(
+      "addNoise", gSiliconReadoutConfig.addNoise,
+      "If true, adds per-module random noise photons drawn from Poisson(noiseNu).");
+  siliconReadoutMessenger->DeclareProperty(
+      "noiseNu", gSiliconReadoutConfig.noiseNu,
+      "Mean noise photons per module for addNoise (default 0.4).");
 
   auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);
   runManager->SetUserInitialization(new DetectorConstruction());

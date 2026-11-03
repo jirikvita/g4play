@@ -1,4 +1,9 @@
 /run/initialize
+# Optional silicon readout setting (default is true): Poisson-smear each module hit count.
+/g4play/silicon/smearPoissonHits true
+# Optional silicon readout noise (default addNoise=false, noiseNu=0.4 photons/module).
+/g4play/silicon/addNoise true
+/g4play/silicon/noiseNu 0.4
 
 # Visualization driver comes from $VIS_DRIVER (default VRML2FILE -> g4_00.wrl; use OGL for a window)
 /control/getEnv VIS_DRIVER
@@ -21,4 +26,3 @@
 /run/beamOn 10000
 
 # Interactive: VIS_DRIVER=OGL ./waterCherenkovSim run.mac -i
-
