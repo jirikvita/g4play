@@ -31,15 +31,33 @@ For each tested ROOT input, [applyNN.py](/home/qitek/work/g4play/applyNN.py) als
 processed, [nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) creates
 `all_tests_momentum_hists.pdf` in the selected `--dir`.
 
-[trainNN.py](/home/qitek/work/g4play/trainNN.py) also writes an inferred-momentum overlay plot for
-the train/test splits:
-`pid_model.momentum_overlay.png` and `pid_model.momentum_overlay.pdf`
+[trainNN.py](/home/qitek/work/g4play/trainNN.py) saves models under [models/](/home/qitek/work/g4play/models)
+and names the exported model with its hidden-layer sizes, for example
+`models/pid_model_h256x128.pt` for `--hidden 256,128`.
+Associated outputs use the same base name:
+`models/pid_model_h256x128.momentum_overlay.png` and
+`models/pid_model_h256x128.momentum_overlay.pdf`
 (filled histograms with `alpha=0.3`, with true-momentum labels).
 
 [nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) also writes:
 `all_tests_inferred_momentum_overlay.png` and `all_tests_inferred_momentum_overlay.pdf`
 with one filled histogram per tested ROOT file (`alpha=0.3`) and legend labels including the true
 momentum from the filename.
+
+Batch testing across standard directories
+=========================================
+
+Use [superTest.py](/home/qitek/work/g4play/superTest.py) to run
+[nnTestAll.py](/home/qitek/work/g4play/nnTestAll.py) across the predefined test directories:
+
+```
+python3 superTest.py --model models/pid_model_h256x128.pt
+```
+
+For each tested directory, generated outputs (`*_nnPID*` and `all_tests_*`) are moved into
+`model_<model-name>/` (for example `model_pid_model_h256x128/`), and
+[CreateHTMLpage_noConv.sh](/home/qitek/work/g4play/scripts/CreateHTMLpage_noConv.sh)
+is run there with the HTML title set to the model filename.
 
 Parallel Geant4 scans
 =====================

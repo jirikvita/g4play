@@ -91,8 +91,8 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--model",
-        default="pid_model.pt",
-        help="Model checkpoint passed to applyNN.py (default: pid_model.pt)",
+        default="models/pid_model.pt",
+        help="Model checkpoint passed to applyNN.py (default: models/pid_model.pt)",
     )
     p.add_argument(
         "--apply-script",

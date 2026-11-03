@@ -43,6 +43,34 @@ def parse_hidden(hidden_str: str) -> List[int]:
     return [int(x.strip()) for x in hidden_str.split(",") if x.strip()]
 
 
+def format_epoch_progress(epoch: int, total: int, width: int = 30) -> str:
+    total = max(1, total)
+    ratio = max(0.0, min(1.0, epoch / total))
+    done = int(round(width * ratio))
+    bar = "#" * done + "-" * (width - done)
+    return f"[{bar}] {epoch}/{total}"
+
+
+def hidden_signature(hidden: Sequence[int]) -> str:
+    return "h" + "x".join(str(int(h)) for h in hidden)
+
+
+def model_out_with_hidden(path: Path, hidden: Sequence[int]) -> Path:
+    token = hidden_signature(hidden)
+    stem = path.stem
+    if re.search(r"(?:^|[_-])h\d+(?:x\d+)*$", stem):
+        return path
+    suffix = path.suffix or ".pt"
+    return path.with_name(f"{stem}_{token}{suffix}")
+
+
+def model_out_in_models_dir(path: Path) -> Path:
+    models_dir = Path("models")
+    if path.parts and path.parts[0] == "models":
+        return path
+    return models_dir / path.name
+
+
 def stratified_split(
     y: np.ndarray, test_ratio: float, rng: np.random.Generator
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -318,26 +346,40 @@ def main() -> None:
             "Class labels are primaryPDG; momentum target is derived from file name."
         ),
     )
-    p.add_argument("--hidden", default="256,128", help="Comma-separated hidden layer sizes")
+    p.add_argument("--hidden", default="256,128,128", help="Comma-separated hidden layer sizes")
     p.add_argument("--dropout", type=float, default=0.1)
-    p.add_argument("--epochs", type=int, default=80)
-    p.add_argument("--batch-size", type=int, default=128)
+    p.add_argument("--epochs", type=int, default=100)
+    p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--momentum-loss-weight", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=1234)
-    p.add_argument("--model-out", default="pid_model.pt")
+    p.add_argument(
+        "--model-out",
+        default="models/pid_model.pt",
+        help=(
+            "Base output model path under models/. Hidden-layer sizes are appended "
+            "automatically (example: models/pid_model_h256x128.pt)."
+        ),
+    )
     args = p.parse_args()
 
+    print("initializing random seeds...")
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     rng = np.random.default_rng(args.seed)
 
+    print("discovering input ROOT files...")
     inputs = args.inputs if args.inputs is not None else discover_default_inputs()
     print("training inputs:")
     for path in inputs:
         print(f"  - {path}")
 
+    print("reading ROOT inputs and building feature dataset...")
     x, pdg, momentum_mev_c, feature_names = build_dataset(inputs)
+    print(
+        f"dataset loaded: events={len(pdg)}, features={x.shape[1]}, "
+        f"momentum_targets={len(momentum_mev_c)}"
+    )
     # Output neuron i <-> classes[i] (PDG code); the dict maps truth PDG -> class index.
     classes = [int(c) for c in np.unique(pdg)]
     pdg_to_idx = {c: i for i, c in enumerate(classes)}
@@ -352,11 +394,13 @@ def main() -> None:
     tr_idx_rel, val_idx_rel = stratified_split(y_trainval, test_ratio=0.1, rng=rng)
     train_idx = trainval_idx[tr_idx_rel]
     val_idx = trainval_idx[val_idx_rel]
+    print("completed stratified split (train+val/test, then train/val)")
 
     x_train, y_train, p_train = x[train_idx], y[train_idx], momentum_mev_c[train_idx]
     x_val, y_val, p_val = x[val_idx], y[val_idx], momentum_mev_c[val_idx]
     x_test, y_test, p_test = x[test_idx], y[test_idx], momentum_mev_c[test_idx]
 
+    print("normalizing input features from training split statistics...")
     mean = x_train.mean(axis=0)
     std = x_train.std(axis=0)
     std[std < 1e-8] = 1.0
@@ -364,6 +408,7 @@ def main() -> None:
     x_val = (x_val - mean) / std
     x_test = (x_test - mean) / std
 
+    print("normalizing momentum targets from training split statistics...")
     momentum_mean = float(p_train.mean())
     momentum_std = float(p_train.std())
     if momentum_std < 1e-8:
@@ -378,14 +423,40 @@ def main() -> None:
     train_dl = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
     test_dl = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False)
+    print("built DataLoaders for train/validation/test")
 
     hidden = parse_hidden(args.hidden)
+    print(f"parsed hidden-layer layout: {hidden}")
+    requested_model_out = model_out_in_models_dir(Path(args.model_out))
+    model_out = model_out_with_hidden(requested_model_out, hidden)
+    model_out.parent.mkdir(parents=True, exist_ok=True)
+    print(f"resolved model output path: {model_out}")
+    if model_out != requested_model_out:
+        print(f"model output renamed to encode hidden sizes: {requested_model_out} -> {model_out}")
+    write_compat_alias = requested_model_out.name == "pid_model.pt" and model_out != requested_model_out
+
+    print("building model and optimizer...")
     model = MLP(x.shape[1], hidden, len(classes) + 1, args.dropout)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     ce = nn.CrossEntropyLoss()
     mse = nn.MSELoss()
+    n_params = sum(p.numel() for p in model.parameters())
+
+    print("training hyperparameters:")
+    print(f"  model_out: {model_out}")
+    print(f"  hidden: {hidden}")
+    print(f"  dropout: {args.dropout}")
+    print(f"  epochs: {args.epochs}")
+    print(f"  batch_size: {args.batch_size}")
+    print(f"  lr: {args.lr}")
+    print(f"  momentum_loss_weight: {args.momentum_loss_weight}")
+    print(f"  seed: {args.seed}")
+    print(f"  device: {device}")
+    print(f"  train/val/test: {len(train_idx)}/{len(val_idx)}/{len(test_idx)}")
+    print(f"  n_parameters: {n_params}")
+    print("starting training loop...")
 
     best = {"val_acc": -1.0, "state": None, "epoch": -1}
     history: Dict[str, List[float]] = {
@@ -415,16 +486,22 @@ def main() -> None:
             best["val_acc"] = val_metrics["acc"]
             best["state"] = copy.deepcopy(model.state_dict())
             best["epoch"] = epoch
+        progress = format_epoch_progress(epoch, args.epochs)
         if epoch == 1 or epoch % 10 == 0 or epoch == args.epochs:
             print(
-                f"epoch {epoch:3d} | "
+                f"{progress} | "
                 f"train loss {tr['loss']:.4f} acc {tr['acc']:.4f} | "
                 f"val loss {val_metrics['loss']:.4f} acc {val_metrics['acc']:.4f} | "
                 f"val p_MAE(norm) {val_metrics['momentum_mae_norm']:.4f}"
             )
+        else:
+            print(f"\r{progress}", end="", flush=True)
+
+    print()
 
     if best["state"] is None:
         raise RuntimeError("Training failed to produce a model state.")
+    print("loading best validation checkpoint and evaluating on test split...")
     model.load_state_dict(best["state"])
     test_metrics = evaluate(model, test_dl, device, len(classes), args.momentum_loss_weight)
     print(
@@ -433,14 +510,13 @@ def main() -> None:
         f"test p_MAE(norm) {test_metrics['momentum_mae_norm']:.4f}"
     )
 
-    model_out = Path(args.model_out)
-
     cms = {}
     rates = {}
     momentum_mae_mev_c = {}
     inferred_momentum_mev_c: Dict[str, np.ndarray] = {}
     true_momentum_by_split_mev_c: Dict[str, np.ndarray] = {}
     for name, dl in (("train", train_dl), ("test", test_dl)):
+        print(f"computing predictions and metrics for {name} split...")
         yt, yp, et_n, ep_n = predict(model, dl, device, len(classes))
         cms[name] = confusion_matrix(yt, yp, len(classes))
         rates[name] = tpr_fpr(cms[name], classes)
@@ -469,6 +545,7 @@ def main() -> None:
         momentum_overlay_png,
         momentum_overlay_pdf,
     )
+    print("finished plot generation")
     print(f"saved plots: {history_plot}, {results_plot}, {momentum_overlay_png}, {momentum_overlay_pdf}")
 
     ckpt = {
@@ -490,6 +567,9 @@ def main() -> None:
     }
     torch.save(ckpt, model_out)
     print(f"saved model: {model_out}")
+    if write_compat_alias:
+        torch.save(ckpt, requested_model_out)
+        print(f"saved compatibility model alias: {requested_model_out}")
 
     metrics = {
         "best_epoch": int(best["epoch"]),
@@ -512,6 +592,7 @@ def main() -> None:
     metrics_path = model_out.with_suffix(".metrics.json")
     metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"saved metrics: {metrics_path}")
+    print("training pipeline complete")
 
 
 if __name__ == "__main__":
