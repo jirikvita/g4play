@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-rm test_only_10k*/*.png
-rm test_only_10k*/*.pdf
-rm test_only_10k*/*nnPID*
+rm results/test_only_10k*/*.png
+rm results/test_only_10k*/*.pdf
+rm results/test_only_10k*/*nnPID*
 

@@ -1,7 +1,4 @@
-
-
 #!/usr/bin/env python3
-
 import argparse
 import os
 import re
@@ -72,15 +69,21 @@ def parse_args() -> argparse.Namespace:
         )
     )
     p.add_argument(
+        "model_arg",
+        nargs="?",
+        default=None,
+        help="Optional positional model checkpoint path (same as --model).",
+    )
+    p.add_argument(
         "--model",
-        default="models/pid_model.pt",
+        default=None,
         help="Model checkpoint passed to nnTestAll.py (default: models/pid_model.pt)",
     )
     p.add_argument(
         "--dirs",
         nargs="+",
         default=DIRS,
-        help="Test directories to process (default: built-in list)",
+        help="Test directories to process under results/ by default (default: built-in list)",
     )
     return p.parse_args()
 
@@ -89,9 +92,13 @@ def main() -> int:
     args = parse_args()
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
+    results_root = project_root / "results"
     script_path = script_dir / "nnTestAll.py"
     html_script = project_root / "scripts" / "CreateHTMLpage_noConv.sh"
-    model = Path(args.model)
+    model_input = args.model if args.model is not None else args.model_arg
+    if model_input is None:
+        model_input = "models/pid_model.pt"
+    model = Path(model_input)
     if not model.is_absolute():
         model = project_root / model
     model_name = model.name
@@ -107,7 +114,10 @@ def main() -> int:
     for directory in args.dirs:
         test_dir = Path(directory)
         if not test_dir.is_absolute():
-            test_dir = project_root / test_dir
+            if test_dir.parts and test_dir.parts[0] == "results":
+                test_dir = project_root / test_dir
+            else:
+                test_dir = results_root / test_dir
         cmd = [sys.executable, str(script_path), "--model", str(model), "--dir", str(test_dir)]
         print("Running:", " ".join(cmd))
         result = subprocess.run(cmd, cwd=project_root, check=False)

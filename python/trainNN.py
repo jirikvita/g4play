@@ -350,7 +350,7 @@ def main() -> None:
             "Class labels are primaryPDG; momentum target is derived from file name."
         ),
     )
-    p.add_argument("--hidden", default="256,128", help="Comma-separated hidden layer sizes")
+    p.add_argument("--hidden", default="256,128,128", help="Comma-separated hidden layer sizes")
     p.add_argument("--dropout", type=float, default=0.1)
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch-size", type=int, default=64)
